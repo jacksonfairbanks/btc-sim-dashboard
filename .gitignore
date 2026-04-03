@@ -27,10 +27,10 @@ Thumbs.db
 # Notebook checkpoints
 .ipynb_checkpoints/
 
-# ── Streamlit dashboard: keep minimal ──
+# ── Only exclude regenerable cache ──
 results/cache/
 
-# Large raw JSONs
+# Large uncompressed JSONs (gz versions are tracked)
 results/experiment_data.json
 results/phase2/config1/phase2_config1_standard.json
 results/phase2/config1/experiment_data.json
@@ -38,12 +38,3 @@ results/phase2/config2/phase2_config2_standard.json
 results/phase2/config6/phase2_config6_standard.json
 results/phase2/config6/experiment_data.json
 results/phase2/config10/phase2_config10_standard.json
-
-# Phase result gz files (not needed for Streamlit dashboard)
-results/phase2/
-results/experiment_data.json.gz
-
-# HTML files (not needed for Streamlit)
-dashboard/btc-treasury-robust.html
-dashboard/monte-carlo.html
-dashboard/data/

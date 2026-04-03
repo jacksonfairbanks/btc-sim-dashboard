@@ -1,0 +1,2447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BTC Treasury Risk Model — Robust Version</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="data/sim-data.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a24;
+            --bg-card: #16161f;
+            --accent-orange: #f7931a;
+            --accent-orange-dim: #f7931a40;
+            --accent-green: #00d4aa;
+            --accent-red: #ff4757;
+            --accent-blue: #4a9eff;
+            --accent-purple: #a855f7;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0b0;
+            --text-muted: #606070;
+            --border-color: #2a2a3a;
+            --glow-orange: 0 0 20px #f7931a40;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .bg-pattern {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 0;
+            background:
+                radial-gradient(ellipse at 20% 20%, #f7931a08 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, #4a9eff08 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, #a855f708 0%, transparent 70%);
+        }
+
+        .container {
+            position: relative; z-index: 1;
+            max-width: 1800px; margin: 0 auto; padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 40px 0 30px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 30px;
+        }
+
+        .logo {
+            display: flex; align-items: center; justify-content: center;
+            gap: 15px; margin-bottom: 10px;
+        }
+
+        .btc-icon {
+            width: 50px; height: 50px;
+            background: linear-gradient(135deg, var(--accent-orange) 0%, #e8850f 100%);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 28px; font-weight: 700;
+            box-shadow: var(--glow-orange);
+        }
+
+        h1 {
+            font-size: 2.5rem; font-weight: 700;
+            background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent-orange) 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle { color: var(--text-secondary); font-size: 1.1rem; margin-top: 8px; }
+        .tag {
+            display: inline-block; padding: 4px 12px;
+            background: rgba(0,212,170,0.15); color: var(--accent-green);
+            border-radius: 4px; font-size: 0.8rem; font-weight: 600; margin-top: 8px;
+        }
+
+        /* ── Main Grid ── */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 400px 1fr;
+            gap: 25px;
+        }
+
+        /* ── Sidebar ── */
+        .control-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 25px;
+            height: fit-content;
+            position: sticky;
+            top: 20px;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+        }
+
+        .panel-title {
+            font-size: 1.1rem; font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 20px;
+            display: flex; align-items: center; gap: 10px;
+        }
+
+        .panel-title::before {
+            content: ''; width: 4px; height: 20px;
+            background: var(--accent-orange); border-radius: 2px;
+        }
+
+        /* ── BCR Hero Card ── */
+        .implied-bcr-hero {
+            background: linear-gradient(135deg, rgba(247, 147, 26, 0.15) 0%, rgba(247, 147, 26, 0.05) 100%);
+            border: 2px solid var(--accent-orange);
+            border-radius: 16px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 15px;
+            box-shadow: 0 0 30px rgba(247, 147, 26, 0.1);
+            position: relative;
+            overflow: visible;
+        }
+
+        .bcr-hero-label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .bcr-hero-value {
+            font-size: 3rem;
+            font-weight: 700;
+            color: var(--accent-orange);
+            font-family: 'JetBrains Mono', monospace;
+            line-height: 1;
+            text-shadow: 0 0 30px rgba(247, 147, 26, 0.3);
+        }
+
+        .bcr-hero-sub {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 8px;
+        }
+
+        /* ── Run Button ── */
+        .sidebar-run-btn {
+            width: 100%;
+            padding: 16px 24px;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, var(--accent-orange) 0%, #e8850f 100%);
+            border: none;
+            border-radius: 10px;
+            color: #000;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.05rem;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 4px 20px rgba(247, 147, 26, 0.3);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .sidebar-run-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(247, 147, 26, 0.4);
+        }
+
+        .sidebar-run-btn:active { transform: translateY(0); }
+
+        .sidebar-run-btn .btn-icon { font-size: 1.2rem; }
+
+        /* ── Control Sections ── */
+        .control-section {
+            margin-bottom: 28px;
+            padding: 18px 14px 20px;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            background: var(--bg-secondary);
+            position: relative;
+            overflow: visible;
+        }
+
+        .control-section:last-child { margin-bottom: 0; }
+
+        .section-label {
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--border-color);
+            display: block;
+        }
+
+        .control-group { margin-bottom: 18px; }
+        .control-group:last-child { margin-bottom: 0; }
+
+        .control-label {
+            display: flex; justify-content: space-between;
+            align-items: center; margin-bottom: 8px;
+        }
+
+        .control-label span { font-size: 0.9rem; color: var(--text-secondary); }
+
+        .control-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem; font-weight: 600;
+            color: var(--accent-orange);
+            background: var(--accent-orange-dim);
+            padding: 3px 10px; border-radius: 6px;
+        }
+
+        .control-hint {
+            font-size: 0.75rem; color: var(--text-muted);
+            margin-top: 4px; font-style: italic;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none; width: 100%; height: 6px;
+            background: var(--bg-tertiary); border-radius: 3px;
+            outline: none; cursor: pointer;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 18px; height: 18px;
+            background: var(--accent-orange); border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 10px var(--accent-orange-dim);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.15);
+            box-shadow: 0 0 15px var(--accent-orange);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 18px; height: 18px;
+            background: var(--accent-orange); border-radius: 50%;
+            cursor: pointer; border: none;
+        }
+
+        /* Green slider for cash reserve */
+        input[type="range"].green-slider::-webkit-slider-thumb {
+            background: #2ecc71;
+            box-shadow: 0 0 10px rgba(46, 204, 113, 0.4);
+        }
+        input[type="range"].green-slider::-webkit-slider-thumb:hover {
+            box-shadow: 0 0 15px rgba(46, 204, 113, 0.7);
+        }
+
+        /* Hidden input */
+        input[type="hidden"] { display: none; }
+
+        /* ── Tooltip Patterns ── */
+        .stat-tooltip-wrapper {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            cursor: help;
+        }
+
+        .stat-info-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 14px; height: 14px;
+            background: var(--border-color);
+            border-radius: 50%;
+            font-size: 9px;
+            color: var(--text-muted);
+            font-weight: 700;
+            cursor: help;
+            transition: all 0.2s;
+        }
+
+        .stat-info-icon:hover {
+            background: var(--accent-orange);
+            color: var(--bg-primary);
+        }
+
+        .stat-tooltip {
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 50%;
+            transform: translateX(-50%);
+            width: 260px;
+            padding: 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--accent-orange);
+            border-radius: 8px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.2s ease;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            pointer-events: none;
+        }
+
+        .stat-tooltip::before {
+            content: '';
+            position: absolute;
+            top: -6px;
+            left: 50%;
+            transform: translateX(-50%) rotate(45deg);
+            width: 10px; height: 10px;
+            background: var(--bg-primary);
+            border-left: 1px solid var(--accent-orange);
+            border-top: 1px solid var(--accent-orange);
+        }
+
+        .stat-tooltip-wrapper:hover .stat-tooltip {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+        }
+
+        /* Bridge gap between icon and tooltip */
+        .stat-tooltip-wrapper .stat-tooltip::after {
+            content: '';
+            position: absolute;
+            top: -15px;
+            left: 0; right: 0;
+            height: 20px;
+        }
+
+        .stat-tooltip-title {
+            font-weight: 600;
+            color: var(--accent-orange);
+            margin-bottom: 6px;
+        }
+
+        .stat-tooltip-why {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid var(--border-color);
+            font-style: italic;
+        }
+        .stat-tooltip-why strong {
+            color: var(--accent-green);
+            font-style: normal;
+        }
+
+        /* BCR hero tooltip: open left */
+        .implied-bcr-tooltip .stat-tooltip {
+            left: 0;
+            transform: translateX(-100%);
+            margin-left: -8px;
+            width: 300px;
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+        .implied-bcr-tooltip .stat-tooltip::before {
+            left: auto;
+            right: 12px;
+            transform: translateX(0) rotate(45deg);
+        }
+
+        /* Sidebar tooltip open left */
+        .sidebar-tooltip-left .stat-tooltip {
+            left: 0;
+            transform: translateX(-100%);
+            margin-left: -8px;
+        }
+        .sidebar-tooltip-left .stat-tooltip::before {
+            left: auto;
+            right: 12px;
+            transform: translateX(0) rotate(45deg);
+        }
+
+        /* BCR ref table in tooltip */
+        .bcr-context-bubble { text-align: center; }
+        .bcr-context-bubble .bcr-context-title {
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        .bcr-context-bubble .bcr-context-subtitle {
+            font-size: 0.75rem;
+            color: var(--text-primary);
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            margin-bottom: 12px;
+        }
+        .bcr-context-bubble .bcr-example-box {
+            border-left: 3px solid var(--accent-orange);
+            background: var(--bg-secondary);
+            padding: 10px 12px;
+            margin: 12px 0;
+            text-align: center;
+            border-radius: 0 6px 6px 0;
+        }
+        .bcr-context-bubble .bcr-example-heading {
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+        .bcr-context-bubble .bcr-example-line {
+            font-size: 0.7rem;
+            color: var(--text-primary);
+            text-transform: uppercase;
+            letter-spacing: 0.2px;
+        }
+        .bcr-context-bubble .bcr-example-line + .bcr-example-line { margin-top: 4px; }
+        .bcr-context-bubble .bcr-formula {
+            font-size: 0.7rem;
+            color: var(--text-primary);
+            text-transform: uppercase;
+            letter-spacing: 0.2px;
+            margin-bottom: 12px;
+        }
+
+        .bcr-ref-table-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 8px 10px;
+            margin-top: 10px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--accent-orange);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            position: relative;
+        }
+        .bcr-ref-table-toggle:hover { color: var(--text-primary); }
+        .bcr-ref-table-toggle .toggle-arrow { transition: transform 0.2s; position: absolute; right: 10px; }
+        .bcr-ref-table-toggle[aria-expanded="true"] .toggle-arrow { transform: rotate(180deg); }
+
+        .bcr-ref-table-wrap { margin-top: 8px; }
+        .bcr-ref-table-wrap table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.7rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .bcr-ref-table-wrap th, .bcr-ref-table-wrap td {
+            padding: 4px 6px;
+            text-align: center;
+            border: 1px solid var(--border-color);
+        }
+        .bcr-ref-table-wrap th {
+            background: var(--bg-tertiary);
+            color: var(--accent-orange);
+            font-weight: 600;
+        }
+        .bcr-ref-table-wrap th:first-child { color: var(--text-muted); font-weight: 500; }
+        .bcr-ref-table-wrap td:first-child { color: var(--text-muted); text-align: center; }
+        .bcr-ref-table-wrap .bcr-highlight-cell {
+            background: rgba(247, 147, 26, 0.35);
+            color: var(--accent-orange);
+            font-weight: 700;
+        }
+
+        /* ── Derived Values ── */
+        .derived-values {
+            background: var(--bg-tertiary);
+            border-radius: 10px; padding: 15px; margin-bottom: 20px;
+        }
+
+        .derived-row {
+            display: flex; justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .derived-row:last-child { border-bottom: none; }
+
+        .derived-label { color: var(--text-secondary); font-size: 0.85rem; }
+
+        .derived-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem; color: var(--text-primary);
+        }
+
+        /* Treasury Scale details */
+        .treasury-scale-summary {
+            cursor: pointer;
+            margin-bottom: 0;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--border-color);
+            list-style: none;
+            user-select: none;
+        }
+        .treasury-scale-arrow {
+            font-size: 0.7rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            margin-left: 4px;
+            display: inline-block;
+            transition: transform 0.2s ease;
+        }
+        .treasury-scale-details[open] .treasury-scale-arrow {
+            transform: rotate(90deg);
+        }
+
+        /* ── Charts Area ── */
+        .charts-area { display: flex; flex-direction: column; gap: 25px; }
+
+        .chart-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px; padding: 25px;
+        }
+
+        .chart-header {
+            display: flex; justify-content: space-between;
+            align-items: center; margin-bottom: 20px;
+        }
+
+        .chart-title { font-size: 1.2rem; font-weight: 600; }
+
+        .chart-controls { display: flex; gap: 10px; align-items: center; }
+
+        .chart-container { width: 100%; height: 400px; }
+
+        /* ── Stat Cards (PD Row) ── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px; margin-bottom: 25px;
+        }
+
+        .stat-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px; padding: 20px; text-align: center;
+            position: relative;
+        }
+
+        .stat-card.model-rbb { border-left: 4px solid #f7931a; }
+        .stat-card.model-garch { border-left: 4px solid #4a9eff; }
+        .stat-card.model-gbm { border-left: 4px solid #a0a0b0; }
+
+        .pd-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+        }
+
+        .pd-card-header .stat-info-icon {
+            flex-shrink: 0;
+            background: var(--border-color);
+            color: var(--text-muted);
+            width: 16px; height: 16px;
+            font-size: 10px;
+        }
+        .pd-card-header .stat-info-icon:hover {
+            background: var(--accent-orange);
+            color: var(--bg-primary);
+        }
+
+        .stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.5rem; font-weight: 700;
+        }
+        .stat-value.green { color: var(--accent-green); }
+        .stat-value.red { color: var(--accent-red); }
+        .stat-value.orange { color: var(--accent-orange); }
+        .stat-value.blue { color: var(--accent-blue); }
+
+        .stat-sub { font-size: 0.7rem; color: var(--text-muted); margin-top: 4px; }
+        .stat-label { font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+
+        /* ── Toggle buttons ── */
+        .toggle-row { display: flex; gap: 8px; margin-bottom: 16px; }
+        .toggle-btn {
+            padding: 8px 16px; background: var(--bg-tertiary); border: 1px solid var(--border-color);
+            border-radius: 8px; color: var(--text-secondary); font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+        }
+        .toggle-btn.active {
+            background: rgba(247,147,26,0.15); border-color: var(--accent-orange); color: var(--accent-orange);
+        }
+
+        /* ── Context Box ── */
+        .context-box {
+            margin-top: 12px; padding: 12px;
+            background: rgba(26,26,46,0.8);
+            border-radius: 8px;
+            border-left: 3px solid var(--accent-orange);
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        /* ── Collapsible Data Table ── */
+        .collapsible-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 15px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px; cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 20px;
+        }
+        .collapsible-header:hover { background: var(--bg-secondary); }
+        .collapsible-header h4 { font-size: 0.9rem; font-weight: 600; color: var(--text-secondary); }
+        .collapsible-icon {
+            font-size: 1.2rem; color: var(--text-muted);
+            transition: transform 0.3s;
+        }
+        .collapsible-header.active .collapsible-icon { transform: rotate(180deg); }
+        .collapsible-content {
+            max-height: 0; overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+        .collapsible-content.active { max-height: 800px; }
+
+        .data-table {
+            width: 100%; border-collapse: collapse;
+            margin-top: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+        }
+        .data-table th, .data-table td {
+            padding: 10px 12px; text-align: right;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .data-table th {
+            background: var(--bg-tertiary);
+            color: var(--text-muted);
+            font-weight: 600; text-transform: uppercase;
+            font-size: 0.7rem; letter-spacing: 0.5px;
+        }
+        .data-table th:first-child, .data-table td:first-child { text-align: left; }
+        .data-table tr:hover td { background: var(--bg-tertiary); }
+
+        /* ── Select ── */
+        select {
+            width: auto; min-width: 180px; padding: 8px 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.85rem; cursor: pointer; outline: none;
+        }
+        select:hover, select:focus { border-color: var(--accent-orange); }
+
+        /* ── Input fields ── */
+        .input-row { margin-bottom: 10px; }
+        .input-row label { display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px; }
+        .input-row input[type="number"] {
+            width: 100%; padding: 8px 12px; background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem; outline: none;
+        }
+        .input-row input:focus { border-color: var(--accent-orange); }
+
+        /* ── Tab Bar ── */
+        .tab-bar {
+            display: flex;
+            gap: 8px;
+            padding: 8px 12px;
+            background: #12121a;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            border: 1px solid var(--border-color);
+            width: fit-content;
+        }
+
+        .tab-btn {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 8px;
+            background: transparent;
+            color: var(--text-secondary);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .tab-btn:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .tab-btn.active {
+            background: var(--accent-orange);
+            color: #000;
+        }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* ── Documentation Tab ── */
+        .docs-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .docs-section {
+            margin-bottom: 60px;
+        }
+
+        .docs-section-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 12px;
+        }
+
+        .docs-section-subtitle {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1rem;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+
+        .docs-callout {
+            border-left: 4px solid var(--accent-orange);
+            background: var(--bg-secondary);
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .docs-callout strong {
+            color: var(--accent-orange);
+        }
+
+        .docs-two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 24px;
+        }
+
+        @media (max-width: 900px) {
+            .docs-two-col { grid-template-columns: 1fr; }
+        }
+
+        .docs-placeholder {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .docs-placeholder-caption {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-align: center;
+            margin-top: 8px;
+            font-style: italic;
+        }
+
+        /* CSS Bar Chart */
+        .css-bar-chart { display: flex; flex-direction: column; gap: 10px; }
+
+        .css-bar-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .css-bar-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            min-width: 100px;
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        .css-bar-track {
+            flex: 1;
+            height: 22px;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .css-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .css-bar-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-primary);
+            min-width: 45px;
+            flex-shrink: 0;
+        }
+
+        /* Horizon bars */
+        .horizon-bar-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+
+        .horizon-bar-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            min-width: 60px;
+            flex-shrink: 0;
+        }
+
+        .horizon-bar-track {
+            flex: 1;
+            height: 28px;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .horizon-bar-fill {
+            height: 100%;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            padding-left: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            color: rgba(0,0,0,0.7);
+            font-weight: 600;
+        }
+
+        /* CSS Donut (legacy, kept for fallback) */
+        .docs-donut-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .docs-donut {
+            width: 220px;
+            height: 220px;
+            border-radius: 50%;
+            position: relative;
+        }
+
+        .docs-donut-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 120px;
+            height: 120px;
+            background: var(--bg-secondary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        .docs-donut-center-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .docs-donut-center-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        /* Weight category */
+        .docs-weight-category {
+            margin-bottom: 20px;
+        }
+
+        .docs-weight-category-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.95rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .docs-weight-metric {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            padding-left: 12px;
+            line-height: 1.8;
+        }
+
+        /* Hero score card */
+        .docs-hero-score {
+            border: 2px solid var(--accent-orange);
+            border-radius: 16px;
+            padding: 30px;
+            text-align: center;
+            background: linear-gradient(135deg, rgba(247,147,26,0.1) 0%, rgba(247,147,26,0.03) 100%);
+            box-shadow: 0 0 40px rgba(247,147,26,0.1);
+            margin-top: 30px;
+        }
+
+        .docs-hero-score-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+
+        .docs-hero-score-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 3.5rem;
+            font-weight: 700;
+            color: var(--accent-orange);
+            text-shadow: 0 0 30px rgba(247,147,26,0.3);
+        }
+
+        .docs-hero-score-sub {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 8px;
+        }
+
+        /* Docs table */
+        .docs-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+        }
+
+        .docs-table th, .docs-table td {
+            padding: 10px 14px;
+            text-align: right;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .docs-table th {
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.7rem;
+            letter-spacing: 0.5px;
+        }
+
+        .docs-table th:first-child, .docs-table td:first-child {
+            text-align: left;
+        }
+
+        .docs-table tr:nth-child(odd) td { background: #12121a; }
+        .docs-table tr:nth-child(even) td { background: #16161f; }
+        .docs-table tr:hover td { background: var(--bg-tertiary); }
+
+        /* Docs stat cards grid */
+        .docs-stat-cards {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        @media (max-width: 900px) {
+            .docs-stat-cards { grid-template-columns: repeat(3, 1fr); }
+        }
+
+        .docs-stat-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .docs-stat-card-label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .docs-stat-card-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--accent-orange);
+        }
+
+        /* Drawdown cards */
+        .docs-dd-cards {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        @media (max-width: 900px) {
+            .docs-dd-cards { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        .docs-dd-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-left: 3px solid var(--accent-red);
+            border-radius: 8px;
+            padding: 14px;
+            text-align: center;
+        }
+
+        .docs-dd-card-label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .docs-dd-card-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--accent-red);
+        }
+
+        .docs-bullet-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .docs-bullet-list li {
+            padding: 8px 0;
+            padding-left: 16px;
+            position: relative;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .docs-bullet-list li::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 16px;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--accent-orange);
+        }
+
+        .docs-italic-footer {
+            font-style: italic;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-top: 16px;
+            line-height: 1.6;
+        }
+
+        /* ── Doc Stats Row (for crash cards) ── */
+        .doc-stats-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        @media (max-width: 900px) {
+            .doc-stats-row { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        /* ── Hero Stats Banner ── */
+        .doc-hero-banner { text-align: center; padding: 50px 20px; margin-bottom: 60px; }
+        .hero-number { font-size: 4.5rem; font-weight: 700; color: var(--accent-orange); font-family: 'JetBrains Mono', monospace; text-shadow: 0 0 40px rgba(247,147,26,0.3); }
+        .hero-subtitle { font-size: 1.2rem; color: var(--text-secondary); margin-top: 8px; }
+        .hero-detail { font-size: 0.85rem; color: var(--text-muted); margin-top: 12px; font-family: 'JetBrains Mono', monospace; }
+        .hero-stats-row { display: flex; justify-content: center; gap: 30px; margin-top: 30px; flex-wrap: wrap; }
+        .hero-stat { background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px 30px; text-align: center; }
+        .hero-stat-value { font-size: 2rem; font-weight: 700; color: var(--accent-orange); font-family: 'JetBrains Mono', monospace; }
+        .hero-stat-label { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; }
+
+        /* ── Leaderboard ── */
+        .leaderboard { display: flex; flex-direction: column; gap: 16px; }
+        .lb-card { display: flex; gap: 16px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; align-items: flex-start; }
+        .lb-rank { font-size: 2rem; font-weight: 700; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; min-width: 40px; }
+        .lb-body { flex: 1; }
+        .lb-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+        .lb-name { font-size: 1.1rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+        .lb-score { font-size: 1.8rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+        .lb-desc { color: var(--text-secondary); font-size: 0.85rem; line-height: 1.6; }
+
+        /* ── SVG Donut ── */
+        .donut-segment { cursor: pointer; transition: all 0.3s ease; transform-origin: 100px 100px; }
+        .donut-segment:hover, .donut-segment.active { filter: drop-shadow(0 0 12px currentColor); stroke-width: 34; }
+        .donut-segment.dimmed { opacity: 0.3; }
+
+        /* ── Category Descriptions (donut right side) ── */
+        .cat-desc { transition: all 0.3s ease; padding: 12px; border-radius: 8px; cursor: pointer; }
+        .cat-desc.highlighted { background: rgba(255,255,255,0.03); }
+        .cat-desc.dimmed { opacity: 0.4; }
+
+        /* ── Footer ── */
+        .footer {
+            text-align: center; padding: 30px;
+            color: var(--text-muted); font-size: 0.8rem;
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 1200px) {
+            .main-grid { grid-template-columns: 1fr; }
+            .control-panel { position: static; max-height: none; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        @media (max-width: 600px) {
+            .stats-grid { grid-template-columns: 1fr; }
+            h1 { font-size: 1.8rem; }
+            .hero-number { font-size: 2.5rem; }
+            .hero-stats-row { flex-direction: column; align-items: center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-pattern"></div>
+    <div class="container">
+
+        <header>
+            <div class="logo">
+                <div class="btc-icon">&#8383;</div>
+                <h1>BTC Treasury Risk Model</h1>
+            </div>
+            <div class="subtitle">Robust Version -- Walk-Forward Validated Simulation Engine</div>
+            <div class="tag">5,000 paths x 3 models x 9-metric scoring</div>
+        </header>
+
+        <div class="tab-bar">
+            <button class="tab-btn active" data-tab="risk" onclick="switchTab('risk')">Risk Model</button>
+            <button class="tab-btn" data-tab="docs" onclick="switchTab('docs')">Documentation</button>
+        </div>
+
+        <div id="tab-risk" class="tab-content active" style="display: block;">
+        <div class="main-grid">
+
+            <!-- ═══ SIDEBAR ═══ -->
+            <div class="control-panel">
+                <div class="panel-title">Model Parameters</div>
+
+                <!-- BCR Hero Card -->
+                <div class="implied-bcr-hero">
+                    <div class="bcr-hero-label">
+                        <span>Implied BCR</span>
+                        <span class="stat-tooltip-wrapper implied-bcr-tooltip" style="position:relative;">
+                            <span class="stat-info-icon" style="width:16px;height:16px;font-size:10px;">?</span>
+                            <div class="stat-tooltip bcr-context-bubble">
+                                <div class="stat-tooltip-title bcr-context-title">Balance Sheet Coverage Ratio</div>
+                                <div class="bcr-context-subtitle">Normalizes exposure across different capital structures.</div>
+                                <div class="bcr-example-box">
+                                    <div class="stat-tooltip-title bcr-example-heading">Example:</div>
+                                    <div class="bcr-example-line">25% amplification at 10% dividend = 40x BCR</div>
+                                    <div class="bcr-example-line">50% amplification at 5% dividend = 40x BCR</div>
+                                </div>
+                                <div class="bcr-formula">BCR = BTC reserves ($) / annual dividend obligations</div>
+                                <div class="bcr-ref-table-toggle" id="bcr-ref-table-toggle" aria-expanded="false" onclick="toggleBcrRefTable(event)">
+                                    <span>BCR Reference Table</span>
+                                    <span class="toggle-arrow">&#9660;</span>
+                                </div>
+                                <div class="bcr-ref-table-wrap" id="bcr-ref-table-wrap" style="display:none;">
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th>AMP / DIV</th>
+                                                <th>5%</th>
+                                                <th>10%</th>
+                                                <th>15%</th>
+                                                <th>20%</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr><td>10%</td><td>200x</td><td>100x</td><td>67x</td><td>50x</td></tr>
+                                            <tr><td>20%</td><td>100x</td><td>50x</td><td>33x</td><td>25x</td></tr>
+                                            <tr><td>25%</td><td>80x</td><td class="bcr-highlight-cell">40x</td><td>27x</td><td>20x</td></tr>
+                                            <tr><td>50%</td><td>40x</td><td>20x</td><td>13x</td><td>10x</td></tr>
+                                            <tr><td>100%</td><td>20x</td><td>10x</td><td>7x</td><td>5x</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </span>
+                    </div>
+                    <div class="bcr-hero-value" id="bcr-display">40.0x</div>
+                    <div class="bcr-hero-sub">From amplification &amp; dividend rate</div>
+                </div>
+
+                <!-- Load Data Button -->
+                <button class="sidebar-run-btn" id="load-data-btn" onclick="loadData()">
+                    <span class="btn-icon">&#9654;</span>
+                    Load Data
+                </button>
+
+                <!-- Capital Structure -->
+                <div class="control-section">
+                    <div class="section-label">Capital Structure</div>
+
+                    <div class="control-group">
+                        <div class="control-label">
+                            <span>Amplification
+                                <span class="stat-tooltip-wrapper" style="position:relative;display:inline-flex;margin-left:4px;">
+                                    <span class="stat-info-icon" style="font-size:0.7rem;width:14px;height:14px;">?</span>
+                                    <div class="stat-tooltip" style="width:260px;font-size:0.75rem;">Perpetual preferred outstanding as a percentage of net asset value.</div>
+                                </span>
+                            </span>
+                            <span class="control-value" id="val-amplification">25.0%</span>
+                        </div>
+                        <input type="range" id="amplification" min="5" max="100" value="25" step="1">
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control-label">
+                            <span>Dividend Rate
+                                <span class="stat-tooltip-wrapper" style="position:relative;display:inline-flex;margin-left:4px;">
+                                    <span class="stat-info-icon" style="font-size:0.7rem;width:14px;height:14px;">?</span>
+                                    <div class="stat-tooltip" style="width:260px;font-size:0.75rem;">Annual dividend rate on the notional perpetual preferred outstanding.</div>
+                                </span>
+                            </span>
+                            <span class="control-value" id="val-div-rate">10.0%</span>
+                        </div>
+                        <input type="range" id="div-rate" min="1" max="30" value="10" step="0.5">
+                    </div>
+
+                    <!-- Hidden BCR input -->
+                    <input type="hidden" id="bcr-hidden" value="40">
+
+                    <!-- Cash Reserve -->
+                    <div class="control-group" style="margin-top: 15px;">
+                        <div class="control-label" style="display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;">
+                            <span style="color: #2ecc71; flex: 1; min-width: 0;">Cash Reserve</span>
+                            <span class="stat-tooltip-wrapper sidebar-tooltip-left" style="position: relative; flex-shrink: 0;">
+                                <span class="stat-info-icon" style="font-size: 0.7rem; width: 14px; height: 14px;">?</span>
+                                <div class="stat-tooltip" style="width: 280px; font-size: 0.75rem;">
+                                    Months of dividends held in cash on the balance sheet for payouts. 0 = all obligations met from BTC sales.
+                                </div>
+                            </span>
+                            <span class="control-value" id="val-cash-reserve" style="color: #2ecc71; flex-shrink: 0; white-space: nowrap; min-width: 2.5em;">0 mo</span>
+                        </div>
+                        <input type="range" id="cash-reserve" class="green-slider" min="0" max="36" value="0" step="1">
+                    </div>
+                </div>
+
+                <!-- Simulation (fixed values) -->
+                <div class="control-section">
+                    <div class="section-label">Simulation</div>
+                    <div class="derived-row"><span class="derived-label">Horizon</span><span class="derived-value">4 years (1,460d)</span></div>
+                    <div class="derived-row"><span class="derived-label">Simulations</span><span class="derived-value">5,000 paths</span></div>
+                    <div class="derived-row"><span class="derived-label">Data</span><span class="derived-value">2013 - 2026</span></div>
+                </div>
+
+                <!-- Treasury Scale (collapsible) -->
+                <div class="control-section">
+                    <details class="treasury-scale-details" style="margin: 0;">
+                        <summary class="section-label treasury-scale-summary">
+                            Treasury Scale (for display)
+                            <span class="treasury-scale-arrow">&#9654;</span>
+                        </summary>
+                        <div style="padding-top: 16px;">
+                            <div class="control-group">
+                                <div class="control-label">
+                                    <span>Initial NAV ($M)
+                                        <span class="stat-tooltip-wrapper sidebar-tooltip-left" style="position:relative;display:inline-flex;margin-left:4px;">
+                                            <span class="stat-info-icon" style="font-size:0.7rem;width:14px;height:14px;">?</span>
+                                            <div class="stat-tooltip" style="width:260px;font-size:0.75rem;">Starting NAV for display context. Simulations are scale-invariant -- BCR is the only driver.</div>
+                                        </span>
+                                    </span>
+                                    <span class="control-value" id="val-nav">$1.0B</span>
+                                </div>
+                                <input type="range" id="nav" min="100" max="50000" value="1000" step="100">
+                                <div class="control-hint">Scale factor only -- doesn't affect BCR risk</div>
+                            </div>
+                            <div class="derived-values">
+                                <div class="derived-row">
+                                    <span class="derived-label">PPE Notional</span>
+                                    <span class="derived-value" id="derived-ppe">$250M</span>
+                                </div>
+                                <div class="derived-row">
+                                    <span class="derived-label">Annual Dividend</span>
+                                    <span class="derived-value" id="derived-annual-div">$25.0M</span>
+                                </div>
+                                <div class="derived-row">
+                                    <span class="derived-label">Monthly Dividend</span>
+                                    <span class="derived-value" id="derived-monthly-div">$2.08M</span>
+                                </div>
+                                <div class="derived-row">
+                                    <span class="derived-label">Months of Runway</span>
+                                    <span class="derived-value" id="derived-runway">--</span>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+
+            </div>
+
+            <!-- ═══ MAIN CONTENT ═══ -->
+            <div class="charts-area">
+
+                <!-- PD Stat Cards: 3 models -->
+                <div class="stats-grid" id="pd-cards-row">
+                    <div class="stat-card model-rbb">
+                        <div class="pd-card-header">
+                            <span style="color: #f7931a;">RBB Failure Rate</span>
+                            <span class="stat-tooltip-wrapper" style="position:relative;">
+                                <span class="stat-info-icon">?</span>
+                                <div class="stat-tooltip" style="width:280px;">
+                                    <div class="stat-tooltip-title">RBB (Block Bootstrap)</div>
+                                    Stationary block bootstrap resamples actual historical BTC return sequences. Geometric block length (30d mean), no regime switching. Production model.
+                                    <div class="stat-tooltip-why"><strong>Walk-forward score: 0.8109</strong> -- best of all 3 models across 126 out-of-sample windows.</div>
+                                </div>
+                            </span>
+                        </div>
+                        <div class="stat-value" id="pd-rbb" style="color: #f7931a;">--</div>
+                        <div class="stat-sub" style="color: var(--text-muted);">Production Model</div>
+                    </div>
+                    <div class="stat-card model-garch">
+                        <div class="pd-card-header">
+                            <span style="color: #4a9eff;">GARCH(1,1) Failure</span>
+                            <span class="stat-tooltip-wrapper" style="position:relative;">
+                                <span class="stat-info-icon">?</span>
+                                <div class="stat-tooltip" style="width:280px;">
+                                    <div class="stat-tooltip-title">GARCH(1,1)</div>
+                                    Volatility clustering model with Student-t innovations (nu=3.18). Captures big-moves-follow-big-moves but generates one day at a time.
+                                    <div class="stat-tooltip-why"><strong>Walk-forward score: 0.7800</strong> -- beats GBM but loses to RBB on tail risk and path dynamics.</div>
+                                </div>
+                            </span>
+                        </div>
+                        <div class="stat-value" id="pd-garch" style="color: #4a9eff;">--</div>
+                        <div class="stat-sub" style="color: var(--text-muted);">Vol Clustering</div>
+                    </div>
+                    <div class="stat-card model-gbm">
+                        <div class="pd-card-header">
+                            <span style="color: #a0a0b0;">GBM Failure Rate</span>
+                            <span class="stat-tooltip-wrapper" style="position:relative;">
+                                <span class="stat-info-icon">?</span>
+                                <div class="stat-tooltip" style="width:280px;">
+                                    <div class="stat-tooltip-title">GBM (Geometric Brownian Motion)</div>
+                                    Log-normal random walk with constant drift and volatility. The simplest possible model -- if your model can't beat GBM, it's not worth its complexity.
+                                    <div class="stat-tooltip-why"><strong>Walk-forward score: 0.7630</strong> -- baseline control. No vol clustering, no fat tails.</div>
+                                </div>
+                            </span>
+                        </div>
+                        <div class="stat-value" id="pd-gbm" style="color: #a0a0b0;">--</div>
+                        <div class="stat-sub" style="color: var(--text-muted);">Baseline</div>
+                    </div>
+                </div>
+
+                <!-- HERO CHART: Terminal BCR Percentile Curves -->
+                <div class="chart-card" style="border-color: var(--accent-orange); box-shadow: 0 0 30px rgba(247,147,26,0.05);">
+                    <div class="chart-header">
+                        <div class="chart-title" style="display: flex; align-items: center; gap: 8px;">
+                            Terminal BCR Percentile Curves
+                            <span class="stat-tooltip-wrapper" style="position:relative;">
+                                <span class="stat-info-icon" style="flex-shrink: 0;">?</span>
+                                <div class="stat-tooltip" style="left: 150px; transform: none; top: 30px;">
+                                    <div class="stat-tooltip-title">Percentile Distribution</div>
+                                    Inverse CDF: each point shows the BCR at that percentile of 5,000 paths. Where a curve crosses BCR=1 = failure rate.
+                                    <div class="stat-tooltip-why"><strong>Why it matters:</strong> Visualizes the full risk spectrum across all simulated outcomes.</div>
+                                </div>
+                            </span>
+                        </div>
+                        <div class="chart-controls">
+                            <select id="bcr-metric-select" onchange="updateBCRCurve()">
+                                <option value="terminal">Terminal BCR</option>
+                                <option value="minimum">Minimum BCR</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="chart-container" id="chart-bcr-curve" style="height: 600px;"></div>
+                    <div class="context-box" id="context-box">
+                        Click "Load Data" to see failure probability context...
+                    </div>
+
+                    <!-- Collapsible Percentile Table -->
+                    <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                        <h4>View Percentile Data Table</h4>
+                        <span class="collapsible-icon">&#9660;</span>
+                    </div>
+                    <div class="collapsible-content">
+                        <table class="data-table" id="percentile-table">
+                            <thead>
+                                <tr>
+                                    <th>Percentile</th>
+                                    <th style="color:var(--accent-orange);">RBB</th>
+                                    <th style="color:var(--accent-blue);">GARCH</th>
+                                    <th>GBM</th>
+                                </tr>
+                            </thead>
+                            <tbody id="percentile-table-body">
+                                <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Load data to see table</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Cumulative Failure Probability -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <div class="chart-title" style="display: flex; align-items: center; gap: 8px;">
+                            Cumulative Failure Probability (BCR &lt; 1)
+                            <span class="stat-tooltip-wrapper" style="position:relative;">
+                                <span class="stat-info-icon" style="flex-shrink: 0;">?</span>
+                                <div class="stat-tooltip" style="left: 200px; transform: none; top: 30px;">
+                                    <div class="stat-tooltip-title">Time to Insolvency</div>
+                                    Shows when failures occur over the 4-year horizon. Steep early curves = high near-term risk.
+                                    <div class="stat-tooltip-why"><strong>Why it matters:</strong> Reveals if failures cluster early (urgent) or are spread over time (manageable).</div>
+                                </div>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="chart-container" id="chart-cum-fail" style="height: 350px;"></div>
+                </div>
+
+                <!-- BTC Price Path Fan Chart -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <div class="chart-title" style="display: flex; align-items: center; gap: 8px;">
+                            BTC Price Path Fan Chart
+                            <span class="stat-tooltip-wrapper" style="position:relative;">
+                                <span class="stat-info-icon" style="flex-shrink: 0;">?</span>
+                                <div class="stat-tooltip" style="left: 200px; transform: none; top: 30px;">
+                                    <div class="stat-tooltip-title">Simulated Price Paths</div>
+                                    RBB confidence envelope (90%/50% CI) with median lines for all 3 models. Log scale.
+                                    <div class="stat-tooltip-why"><strong>Why it matters:</strong> Validates that the simulation engine produces realistic BTC price trajectories.</div>
+                                </div>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="chart-container" id="chart-price" style="height: 400px;"></div>
+                </div>
+
+            </div>
+        </div>
+
+        </div><!-- /tab-risk -->
+
+        <div id="tab-docs" class="tab-content" style="display: none;">
+            <div class="docs-container">
+
+                <!-- ═══ Hero Stats Banner ═══ -->
+                <div class="doc-hero-banner">
+                    <div class="hero-number" id="doc-hero-paths">630,000</div>
+                    <div class="hero-subtitle">simulated price paths, each scored against reality</div>
+                    <div class="hero-detail">126 independent out-of-sample windows x 5,000 paths per window x 4 horizons x 3 models</div>
+                    <div class="hero-stats-row">
+                        <div class="hero-stat"><div class="hero-stat-value">126</div><div class="hero-stat-label">out-of-sample windows</div></div>
+                        <div class="hero-stat"><div class="hero-stat-value" id="doc-training-days">4,209</div><div class="hero-stat-label">days of BTC history</div></div>
+                        <div class="hero-stat"><div class="hero-stat-value">9</div><div class="hero-stat-label">scoring dimensions</div></div>
+                        <div class="hero-stat"><div class="hero-stat-value">0</div><div class="hero-stat-label">lookahead bias</div></div>
+                    </div>
+                </div>
+
+                <!-- ═══ Section 1: Single Window Walk-Through ═══ -->
+                <div class="docs-section">
+                    <div class="docs-section-title">How We Validated: A Single Window Walk-Through</div>
+                    <div class="docs-section-subtitle">Pick one window. Train the model on everything before it. Simulate 5,000 paths forward. Score against what actually happened.</div>
+
+                    <div class="docs-callout">
+                        <strong>Window 25</strong> &mdash; Train: start to 2022-11-15 &mdash; Test: 2022-11-15 to 2024-11-14 (730 days) &mdash; <strong>Composite: 0.8509</strong>
+                    </div>
+
+                    <div class="docs-two-col">
+                        <div>
+                            <div id="doc-walkthrough-fan" style="height:350px; border-radius:12px; overflow:hidden; background: var(--bg-tertiary); border: 1px solid var(--border-color);"></div>
+                            <div class="docs-placeholder-caption">5,000 simulated paths vs what actually happened</div>
+                        </div>
+                        <div>
+                            <div class="css-bar-chart">
+                                <div class="css-bar-row">
+                                    <div class="css-bar-label">DD Duration</div>
+                                    <div class="css-bar-track"><div class="css-bar-fill" style="width: 88.3%; background: #f7931a;"></div></div>
+                                    <div class="css-bar-value">0.883</div>
+                                </div>
+                                <div class="css-bar-row">
+                                    <div class="css-bar-label">Recovery</div>
+                                    <div class="css-bar-track"><div class="css-bar-fill" style="width: 90.5%; background: #f7931a;"></div></div>
+                                    <div class="css-bar-value">0.905</div>
+                                </div>
+                                <div class="css-bar-row">
+                                    <div class="css-bar-label">Time in DD</div>
+                                    <div class="css-bar-track"><div class="css-bar-fill" style="width: 87.3%; background: #f7931a;"></div></div>
+                                    <div class="css-bar-value">0.873</div>
+                                </div>
+                                <div class="css-bar-row">
+                                    <div class="css-bar-label">Tail Index</div>
+                                    <div class="css-bar-track"><div class="css-bar-fill" style="width: 84.9%; background: #ff4757;"></div></div>
+                                    <div class="css-bar-value">0.849</div>
+                                </div>
+                                <div class="css-bar-row">
+                                    <div class="css-bar-label">Band Cov</div>
+                                    <div class="css-bar-track"><div class="css-bar-fill" style="width: 100%; background: #ff4757;"></div></div>
+                                    <div class="css-bar-value">1.000</div>
+                                </div>
+                                <div class="css-bar-row">
+                                    <div class="css-bar-label">KS Stat</div>
+                                    <div class="css-bar-track"><div class="css-bar-fill" style="width: 94.3%; background: #eab308;"></div></div>
+                                    <div class="css-bar-value">0.943</div>
+                                </div>
+                                <div class="css-bar-row">
+                                    <div class="css-bar-label">QQ Div</div>
+                                    <div class="css-bar-track"><div class="css-bar-fill" style="width: 78.5%; background: #eab308;"></div></div>
+                                    <div class="css-bar-value">0.785</div>
+                                </div>
+                                <div class="css-bar-row">
+                                    <div class="css-bar-label">Vol Cluster</div>
+                                    <div class="css-bar-track"><div class="css-bar-fill" style="width: 81.6%; background: #a855f7;"></div></div>
+                                    <div class="css-bar-value">0.816</div>
+                                </div>
+                                <div class="css-bar-row">
+                                    <div class="css-bar-label">MAPE</div>
+                                    <div class="css-bar-track"><div class="css-bar-fill" style="width: 66.3%; background: #4a9eff;"></div></div>
+                                    <div class="css-bar-value">0.663</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ═══ Section 2: Repeated 126 Times ═══ -->
+                <div class="docs-section">
+                    <div class="docs-section-title">This Process Repeated 126 Times</div>
+                    <div class="docs-section-subtitle">Every 90 days, the training window expands and a new out-of-sample test runs. No window ever sees data from its own test period.</div>
+
+                    <div style="max-width: 700px;">
+                        <div class="horizon-bar-row">
+                            <div class="horizon-bar-label" style="color: #00d4aa;">180d</div>
+                            <div class="horizon-bar-track">
+                                <div class="horizon-bar-fill" style="width: 25%; background: #00d4aa;">37 windows</div>
+                            </div>
+                        </div>
+                        <div class="horizon-bar-row">
+                            <div class="horizon-bar-label" style="color: #4a9eff;">365d</div>
+                            <div class="horizon-bar-track">
+                                <div class="horizon-bar-fill" style="width: 45%; background: #4a9eff;">35 windows</div>
+                            </div>
+                        </div>
+                        <div class="horizon-bar-row">
+                            <div class="horizon-bar-label" style="color: #f7931a;">730d</div>
+                            <div class="horizon-bar-track">
+                                <div class="horizon-bar-fill" style="width: 70%; background: #f7931a;">31 windows</div>
+                            </div>
+                        </div>
+                        <div class="horizon-bar-row">
+                            <div class="horizon-bar-label" style="color: #ff4757;">1460d</div>
+                            <div class="horizon-bar-track">
+                                <div class="horizon-bar-fill" style="width: 95%; background: #ff4757;">23 windows</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ═══ Section 3: From 126 Scores to One Final Number (SVG Donut) ═══ -->
+                <div class="docs-section">
+                    <div class="docs-section-title">From 126 Scores to One Final Number</div>
+
+                    <div class="docs-two-col">
+                        <div class="docs-donut-container">
+                            <svg viewBox="0 0 200 200" width="250" height="250" id="donut-svg">
+                                <circle class="donut-segment" data-cat="path-dynamics" cx="100" cy="100" r="70" fill="none" stroke="#f7931a" stroke-width="30" stroke-dasharray="153.94 285.88" stroke-dashoffset="0" transform="rotate(-90 100 100)"/>
+                                <circle class="donut-segment" data-cat="tail-risk" cx="100" cy="100" r="70" fill="none" stroke="#ff4757" stroke-width="30" stroke-dasharray="109.96 329.87" stroke-dashoffset="-153.94" transform="rotate(-90 100 100)"/>
+                                <circle class="donut-segment" data-cat="distributional" cx="100" cy="100" r="70" fill="none" stroke="#ffd700" stroke-width="30" stroke-dasharray="65.97 373.85" stroke-dashoffset="-263.89" transform="rotate(-90 100 100)"/>
+                                <circle class="donut-segment" data-cat="vol-clustering" cx="100" cy="100" r="70" fill="none" stroke="#a855f7" stroke-width="30" stroke-dasharray="43.98 395.84" stroke-dashoffset="-329.87" transform="rotate(-90 100 100)"/>
+                                <circle class="donut-segment" data-cat="forecast" cx="100" cy="100" r="70" fill="none" stroke="#4a9eff" stroke-width="30" stroke-dasharray="65.97 373.85" stroke-dashoffset="-373.85" transform="rotate(-90 100 100)"/>
+                                <text x="100" y="95" text-anchor="middle" fill="#ffffff" font-size="14" font-weight="600" font-family="JetBrains Mono" id="donut-center-top">Composite</text>
+                                <text x="100" y="115" text-anchor="middle" fill="#a0a0b0" font-size="11" font-family="JetBrains Mono" id="donut-center-bottom">9 Metrics</text>
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="docs-weight-category cat-desc" data-cat="path-dynamics">
+                                <div class="docs-weight-category-title" style="color: #f7931a;">Path Dynamics 35%</div>
+                                <div class="docs-weight-metric">DD Duration (13%) &middot; Recovery Time (12%) &middot; Time-in-DD (10%)</div>
+                            </div>
+                            <div class="docs-weight-category cat-desc" data-cat="tail-risk">
+                                <div class="docs-weight-category-title" style="color: #ff4757;">Tail Risk 25%</div>
+                                <div class="docs-weight-metric">Tail Index (13%) &middot; Band Coverage (12%)</div>
+                            </div>
+                            <div class="docs-weight-category cat-desc" data-cat="distributional">
+                                <div class="docs-weight-category-title" style="color: #ffd700;">Distributional 15%</div>
+                                <div class="docs-weight-metric">KS Stat (7%) &middot; QQ Divergence (8%)</div>
+                            </div>
+                            <div class="docs-weight-category cat-desc" data-cat="vol-clustering">
+                                <div class="docs-weight-category-title" style="color: #a855f7;">Vol Clustering 10%</div>
+                                <div class="docs-weight-metric">ACF of r&sup2; (10%)</div>
+                            </div>
+                            <div class="docs-weight-category cat-desc" data-cat="forecast">
+                                <div class="docs-weight-category-title" style="color: #4a9eff;">Forecast 15%</div>
+                                <div class="docs-weight-metric">MAPE (15%)</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="docs-hero-score">
+                        <div class="docs-hero-score-label">RBB Walk-Forward Final Score</div>
+                        <div class="docs-hero-score-value">0.8109</div>
+                        <div class="docs-hero-score-sub">Validated across 126 out-of-sample windows. Zero lookahead bias.</div>
+                    </div>
+                </div>
+
+                <!-- ═══ Section 4: Model Leaderboard ═══ -->
+                <div class="docs-section">
+                    <div class="docs-section-title">Model Leaderboard</div>
+                    <div class="leaderboard">
+                        <div class="lb-card" style="border-left: 4px solid #f7931a;">
+                            <div class="lb-rank">1</div>
+                            <div class="lb-body">
+                                <div class="lb-header"><span class="lb-name" style="color:#f7931a;">RBB (Block Bootstrap)</span><span class="lb-score" style="color:#f7931a;" id="lb-score-rbb">0.8109</span></div>
+                                <div class="lb-desc">Production model. Resamples actual historical BTC return sequences as contiguous blocks. Nonparametric -- no assumptions about return distribution. Preserves fat tails, volatility clustering, and multi-day drawdown patterns by construction.</div>
+                            </div>
+                        </div>
+                        <div class="lb-card" style="border-left: 4px solid #4a9eff;">
+                            <div class="lb-rank">2</div>
+                            <div class="lb-body">
+                                <div class="lb-header"><span class="lb-name" style="color:#4a9eff;">GARCH(1,1) t-dist</span><span class="lb-score" style="color:#4a9eff;" id="lb-score-garch">0.7800</span></div>
+                                <div class="lb-desc">Volatility clustering benchmark. Models conditional variance with Student's t innovations. Captures 'big moves follow big moves' but falls short on tail risk (-0.12 on tail index). Loses to GBM at 1460d due to IGARCH variance drift.</div>
+                            </div>
+                        </div>
+                        <div class="lb-card" style="border-left: 4px solid #a0a0b0;">
+                            <div class="lb-rank">3</div>
+                            <div class="lb-body">
+                                <div class="lb-header"><span class="lb-name" style="color:#a0a0b0;">GBM (Log-Normal)</span><span class="lb-score" style="color:#a0a0b0;" id="lb-score-gbm">0.7630</span></div>
+                                <div class="lb-desc">Baseline control. Constant drift, constant volatility, normal innovations. The simplest possible price model. Exists to answer: 'Is your model adding value over a random walk?'</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ═══ Section 5: Walk-Forward Composite by Horizon ═══ -->
+                <div class="docs-section">
+                    <div class="docs-section-title">Walk-Forward Composite by Horizon</div>
+                    <div class="docs-section-subtitle">Per-horizon performance across all walk-forward windows.</div>
+                    <div id="doc-horizon-chart" style="height:400px; border-radius:12px; overflow:hidden;"></div>
+                    <div class="docs-callout" style="margin-top:20px;">
+                        <strong>Horizon weights:</strong> 180d=10%, 365d=20%, 730d=35%, 1460d=35%. RBB's advantage widens at longer horizons where multi-day path structure matters most. GARCH loses to GBM at 1460d due to IGARCH variance drift.
+                    </div>
+                </div>
+
+                <!-- ═══ Section 6: Tail Event Reproduction ═══ -->
+                <div class="docs-section">
+                    <div class="docs-section-title">Tail Event Reproduction @ 1460d</div>
+
+                    <table class="docs-table" id="doc-tail-table">
+                        <thead>
+                            <tr>
+                                <th style="color: var(--text-secondary);">Event</th>
+                                <th style="color: #f7931a;">RBB</th>
+                                <th style="color: #4a9eff;">GARCH</th>
+                                <th style="color: #a0a0b0;">GBM</th>
+                            </tr>
+                        </thead>
+                        <tbody id="doc-tail-tbody">
+                            <tr><td>DD >= 50%</td><td>92.3%</td><td>59.2%</td><td>96.1%</td></tr>
+                            <tr><td>DD >= 75%</td><td>28.9%</td><td>17.8%</td><td>44.5%</td></tr>
+                            <tr><td>Duration >= 180d</td><td>95.4%</td><td>86.1%</td><td>98.4%</td></tr>
+                            <tr><td>Duration >= 365d</td><td>64.4%</td><td>44.7%</td><td>80.2%</td></tr>
+                            <tr><td>2014 Mt Gox</td><td>9.0%</td><td>6.7%</td><td>19.16%</td></tr>
+                            <tr><td>2018 Crash</td><td>10.28%</td><td>7.64%</td><td>21.44%</td></tr>
+                            <tr><td>2022 Crash</td><td>23.34%</td><td>11.86%</td><td>38.22%</td></tr>
+                            <tr><td>2020 Flash Crash</td><td>0.38%</td><td>0.3%</td><td>0.08%</td></tr>
+                        </tbody>
+                    </table>
+
+                    <div class="docs-callout" style="margin-top: 20px;">
+                        GBM produces more 75%+ drawdowns than RBB but tail index accuracy tells the real story &mdash; <strong>RBB: 0.90</strong>, GARCH: 0.77, GBM: 0.48.
+                    </div>
+                </div>
+
+                <!-- ═══ Section 7: Production Config — Forward Projection ═══ -->
+                <div class="docs-section">
+                    <div class="docs-section-title">Production Config &mdash; Forward Projection</div>
+
+                    <div class="docs-callout">
+                        <strong>Regime Block Bootstrap &mdash; Production Config</strong><br>
+                        Geometric bl=30 &middot; regime OFF &middot; full historical pool &middot; 4,947 training days &middot; starting price $66,885
+                    </div>
+
+                    <div class="docs-stat-cards" id="doc-forward-stats">
+                        <div class="docs-stat-card">
+                            <div class="docs-stat-card-label">Median</div>
+                            <div class="docs-stat-card-value" id="doc-fwd-median">$407,907</div>
+                        </div>
+                        <div class="docs-stat-card">
+                            <div class="docs-stat-card-label">Mean</div>
+                            <div class="docs-stat-card-value" id="doc-fwd-mean">$1,104,167</div>
+                        </div>
+                        <div class="docs-stat-card">
+                            <div class="docs-stat-card-label">P5</div>
+                            <div class="docs-stat-card-value" id="doc-fwd-p5">$41,973</div>
+                        </div>
+                        <div class="docs-stat-card">
+                            <div class="docs-stat-card-label">P95</div>
+                            <div class="docs-stat-card-value" id="doc-fwd-p95">$3,934,186</div>
+                        </div>
+                        <div class="docs-stat-card">
+                            <div class="docs-stat-card-label">Below Start</div>
+                            <div class="docs-stat-card-value" id="doc-fwd-below">10.6%</div>
+                        </div>
+                    </div>
+
+                    <div id="doc-forward-fan" style="height:350px; border-radius:12px; overflow:hidden; background: var(--bg-tertiary); border: 1px solid var(--border-color); margin-bottom: 16px;"></div>
+
+                    <div class="doc-stats-row">
+                        <div class="stat-card" style="border-left: 4px solid var(--accent-orange);">
+                            <div class="stat-label" style="font-weight:700;">2014 Mt. Gox</div>
+                            <div style="font-size:0.7rem; color:var(--text-muted);">DD >= 85%, duration >= 13mo</div>
+                            <div class="stat-value" style="color:var(--accent-orange); font-size:1.6rem;" id="doc-crash-mtgox">341 / 5,000</div>
+                            <div style="color:var(--accent-orange); font-size:0.9rem;" id="doc-crash-mtgox-pct">(6.82%)</div>
+                        </div>
+                        <div class="stat-card" style="border-left: 4px solid var(--accent-orange);">
+                            <div class="stat-label" style="font-weight:700;">2018 Crash</div>
+                            <div style="font-size:0.7rem; color:var(--text-muted);">DD >= 84%, duration >= 12mo</div>
+                            <div class="stat-value" style="color:var(--accent-orange); font-size:1.6rem;" id="doc-crash-2018">411 / 5,000</div>
+                            <div style="color:var(--accent-orange); font-size:0.9rem;" id="doc-crash-2018-pct">(8.22%)</div>
+                        </div>
+                        <div class="stat-card" style="border-left: 4px solid var(--accent-orange);">
+                            <div class="stat-label" style="font-weight:700;">2022 Crash</div>
+                            <div style="font-size:0.7rem; color:var(--text-muted);">DD >= 77%, duration >= 13mo</div>
+                            <div class="stat-value" style="color:var(--accent-orange); font-size:1.6rem;" id="doc-crash-2022">949 / 5,000</div>
+                            <div style="color:var(--accent-orange); font-size:0.9rem;" id="doc-crash-2022-pct">(18.98%)</div>
+                        </div>
+                        <div class="stat-card" style="border-left: 4px solid var(--accent-orange);">
+                            <div class="stat-label" style="font-weight:700;">2020 Flash Crash</div>
+                            <div style="font-size:0.7rem; color:var(--text-muted);">DD >= 50% within 30d</div>
+                            <div class="stat-value" style="color:var(--accent-orange); font-size:1.6rem;" id="doc-crash-2020">15 / 5,000</div>
+                            <div style="color:var(--accent-orange); font-size:0.9rem;" id="doc-crash-2020-pct">(0.30%)</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ═══ Section 8: What This Means ═══ -->
+                <div class="docs-section">
+                    <div class="docs-section-title">What This Means</div>
+
+                    <div class="docs-callout">
+                        <strong>Of 5,000 simulated 4-year paths...</strong>
+                        <ul class="docs-bullet-list" style="margin-top: 12px;">
+                            <li>89.2% experience a drawdown of 50% or more at some point &mdash; this is normal BTC behavior, not a tail event.</li>
+                            <li>23.5% experience a drawdown of 75% or more &mdash; comparable to the 2018 and 2022 bear markets.</li>
+                            <li>70.9% spend at least one continuous year below their all-time high &mdash; extended drawdown durations are the norm, not the exception.</li>
+                        </ul>
+                    </div>
+
+                    <div class="docs-italic-footer">
+                        These are not hypothetical scenarios imposed on the model &mdash; they emerge naturally from resampling actual historical BTC return sequences. The block bootstrap cannot generate return patterns that never occurred. Every simulated crash is built from real crash blocks.
+                    </div>
+                </div>
+
+            </div>
+        </div><!-- /tab-docs -->
+
+        <div class="footer">
+            BTC Sim Engine -- Robust Version | Walk-Forward Validated | @LongGamma
+        </div>
+    </div>
+
+    <script>
+        // ════════════════════════════════════════════
+        // DATA & CONSTANTS
+        // ════════════════════════════════════════════
+        const D = SIM_DATA;
+        const META = D.metadata;
+        const COLORS = { rbb: '#f7931a', garch: '#4a9eff', gbm: '#606070' };
+        const LABELS = { rbb: 'RBB (Block Bootstrap)', garch: 'GARCH(1,1)', gbm: 'GBM (Baseline)' };
+        const WF = META.walk_forward_scores;
+        const PLOTLY_LAYOUT = {
+            paper_bgcolor: 'transparent',
+            plot_bgcolor: '#16161f',
+            font: { family: 'Space Grotesk, sans-serif', color: '#a0a0b0', size: 12 },
+            margin: { t: 20, r: 30, b: 50, l: 70 },
+            legend: { font: { color: '#a0a0b0', size: 11 }, bgcolor: 'transparent' },
+            xaxis: { gridcolor: '#2a2a3a', zerolinecolor: '#2a2a3a', tickfont: { color: '#a0a0b0' } },
+            yaxis: { gridcolor: '#2a2a3a', zerolinecolor: '#2a2a3a', tickfont: { color: '#a0a0b0' } },
+        };
+        const LOG_TICKVALS = [0.1, 0.5, 1, 2, 5, 10, 20, 50, 100, 500, 1000, 5000, 10000, 50000, 100000];
+        const LOG_TICKTEXT = ['0.1','0.5','1','2','5','10','20','50','100','500','1K','5K','10K','50K','100K'];
+
+        // ════════════════════════════════════════════
+        // ENGINE_RESULTS — Shared data for Documentation tab
+        // ════════════════════════════════════════════
+        window.ENGINE_RESULTS = {
+            totalWindows: 126,
+            trainingDays: D.metadata.n_training_days || 4209,
+            dataThrough: D.metadata.data_end_date || '2026-03-28',
+            startPrice: D.metadata.initial_price || 66885,
+            nSims: D.metadata.n_sims || 5000,
+            totalPaths: 126 * (D.metadata.n_sims || 5000),
+
+            compositeScores: D.metadata.walk_forward_scores || { rbb: 0.8109, garch: 0.7800, gbm: 0.7630 },
+
+            horizonScores: {
+                '180d': { rbb: 0.810, garch: 0.797, gbm: 0.759 },
+                '365d': { rbb: 0.822, garch: 0.802, gbm: 0.771 },
+                '730d': { rbb: 0.827, garch: 0.798, gbm: 0.762 },
+                '1460d': { rbb: 0.793, garch: 0.751, gbm: 0.762 }
+            },
+
+            exampleWindow: {
+                id: 25, horizon: '730d', composite: 0.8509,
+                trainEnd: '2022-11-15', testEnd: '2024-11-14',
+                metrics: {
+                    ddDuration: 0.883, recovery: 0.905, timeInDD: 0.873,
+                    tailIndex: 0.849, bandCov: 1.000, ksStat: 0.943,
+                    qqDiv: 0.785, volCluster: 0.816, mape: 0.663
+                }
+            },
+
+            tailEvents: {
+                dd50: { rbb: 92.3, garch: 59.2, gbm: 96.1 },
+                dd75: { rbb: 28.9, garch: 17.8, gbm: 44.5 },
+                dur180: { rbb: 95.4, garch: 86.1, gbm: 98.4 },
+                dur365: { rbb: 64.4, garch: 44.7, gbm: 80.2 },
+                mtGox: { rbb: '450/5,000 (9.0%)', garch: '335/5,000 (6.7%)', gbm: '958/5,000 (19.16%)' },
+                crash2018: { rbb: '514/5,000 (10.28%)', garch: '382/5,000 (7.64%)', gbm: '1,072/5,000 (21.44%)' },
+                crash2022: { rbb: '1,167/5,000 (23.34%)', garch: '593/5,000 (11.86%)', gbm: '1,911/5,000 (38.22%)' },
+                flash2020: { rbb: '19/5,000 (0.38%)', garch: '15/5,000 (0.3%)', gbm: '4/5,000 (0.08%)' }
+            },
+
+            forwardProjection: {
+                medianTerminal: Math.round(D.terminal_price_stats && D.terminal_price_stats.rbb ? D.terminal_price_stats.rbb.median : 407907),
+                meanTerminal: Math.round(D.terminal_price_stats && D.terminal_price_stats.rbb ? D.terminal_price_stats.rbb.mean : 1104167),
+                p5: Math.round(D.terminal_price_stats && D.terminal_price_stats.rbb ? D.terminal_price_stats.rbb.p5 : 41973),
+                p95: Math.round(D.terminal_price_stats && D.terminal_price_stats.rbb ? D.terminal_price_stats.rbb.p95 : 3934186),
+                belowStart: (D.terminal_price_stats && D.terminal_price_stats.rbb ? D.terminal_price_stats.rbb.pct_below_start : 10.6),
+                crashes: {
+                    mtGox: { count: 341, total: 5000, pct: 6.82, criteria: 'DD >= 85%, duration >= 13mo' },
+                    crash2018: { count: 411, total: 5000, pct: 8.22, criteria: 'DD >= 84%, duration >= 12mo' },
+                    crash2022: { count: 949, total: 5000, pct: 18.98, criteria: 'DD >= 77%, duration >= 13mo' },
+                    flash2020: { count: 15, total: 5000, pct: 0.30, criteria: 'DD >= 50% within 30d' }
+                }
+            },
+
+            pricePercentiles: D.price_percentiles || null,
+            bcrOverTime: D.bcr_over_time || null,
+        };
+        const ER = window.ENGINE_RESULTS;
+
+        let dataLoaded = false;
+
+        // ════════════════════════════════════════════
+        // POPULATE DOC TAB FROM ENGINE_RESULTS
+        // ════════════════════════════════════════════
+        function populateDocFromER() {
+            // Hero banner
+            var totalPaths = ER.totalPaths;
+            var heroEl = document.getElementById('doc-hero-paths');
+            if (heroEl) heroEl.textContent = totalPaths.toLocaleString();
+
+            var trainingEl = document.getElementById('doc-training-days');
+            if (trainingEl) trainingEl.textContent = ER.trainingDays.toLocaleString();
+
+            // Leaderboard scores
+            var cs = ER.compositeScores;
+            var lbRbb = document.getElementById('lb-score-rbb');
+            if (lbRbb) lbRbb.textContent = cs.rbb.toFixed(4);
+            var lbGarch = document.getElementById('lb-score-garch');
+            if (lbGarch) lbGarch.textContent = cs.garch.toFixed(4);
+            var lbGbm = document.getElementById('lb-score-gbm');
+            if (lbGbm) lbGbm.textContent = cs.gbm.toFixed(4);
+
+            // Forward projection stats
+            var fp = ER.forwardProjection;
+            var fwdMedian = document.getElementById('doc-fwd-median');
+            if (fwdMedian) fwdMedian.textContent = '$' + fp.medianTerminal.toLocaleString();
+            var fwdMean = document.getElementById('doc-fwd-mean');
+            if (fwdMean) fwdMean.textContent = '$' + fp.meanTerminal.toLocaleString();
+            var fwdP5 = document.getElementById('doc-fwd-p5');
+            if (fwdP5) fwdP5.textContent = '$' + fp.p5.toLocaleString();
+            var fwdP95 = document.getElementById('doc-fwd-p95');
+            if (fwdP95) fwdP95.textContent = '$' + fp.p95.toLocaleString();
+            var fwdBelow = document.getElementById('doc-fwd-below');
+            if (fwdBelow) fwdBelow.textContent = fp.belowStart + '%';
+
+            // Crash cards
+            var crashes = fp.crashes;
+            var mtgoxEl = document.getElementById('doc-crash-mtgox');
+            if (mtgoxEl) mtgoxEl.textContent = crashes.mtGox.count.toLocaleString() + ' / ' + crashes.mtGox.total.toLocaleString();
+            var mtgoxPct = document.getElementById('doc-crash-mtgox-pct');
+            if (mtgoxPct) mtgoxPct.textContent = '(' + crashes.mtGox.pct.toFixed(2) + '%)';
+
+            var c2018El = document.getElementById('doc-crash-2018');
+            if (c2018El) c2018El.textContent = crashes.crash2018.count.toLocaleString() + ' / ' + crashes.crash2018.total.toLocaleString();
+            var c2018Pct = document.getElementById('doc-crash-2018-pct');
+            if (c2018Pct) c2018Pct.textContent = '(' + crashes.crash2018.pct.toFixed(2) + '%)';
+
+            var c2022El = document.getElementById('doc-crash-2022');
+            if (c2022El) c2022El.textContent = crashes.crash2022.count.toLocaleString() + ' / ' + crashes.crash2022.total.toLocaleString();
+            var c2022Pct = document.getElementById('doc-crash-2022-pct');
+            if (c2022Pct) c2022Pct.textContent = '(' + crashes.crash2022.pct.toFixed(2) + '%)';
+
+            var c2020El = document.getElementById('doc-crash-2020');
+            if (c2020El) c2020El.textContent = crashes.flash2020.count.toLocaleString() + ' / ' + crashes.flash2020.total.toLocaleString();
+            var c2020Pct = document.getElementById('doc-crash-2020-pct');
+            if (c2020Pct) c2020Pct.textContent = '(' + crashes.flash2020.pct.toFixed(2) + '%)';
+        }
+
+        // ════════════════════════════════════════════
+        // DOCUMENTATION TAB CHARTS
+        // ════════════════════════════════════════════
+
+        function renderWalkthroughFan() {
+            var pp = ER.pricePercentiles;
+            if (!pp || !pp.rbb) return;
+            // The price percentiles are sampled every 30 days for the full 1460d horizon
+            // For window 25 (730d), we need the first 730/30 ~ 24 data points
+            var nPoints = Math.min(25, pp.rbb.p50.length); // 730 days / 30 = ~24, +1 for start
+            var rbb = pp.rbb;
+            var x = Array.from({length: nPoints}, function(_, i) { return i * 30; });
+
+            var p5Slice = rbb.p5.slice(0, nPoints);
+            var p95Slice = rbb.p95.slice(0, nPoints);
+            var p25Slice = rbb.p25.slice(0, nPoints);
+            var p75Slice = rbb.p75.slice(0, nPoints);
+            var p50Slice = rbb.p50.slice(0, nPoints);
+
+            var traces = [
+                {
+                    x: x.concat([].concat(x).reverse()),
+                    y: p5Slice.concat([].concat(p95Slice).reverse()),
+                    fill: 'toself', fillcolor: 'rgba(247,147,26,0.08)',
+                    line: {color: 'transparent'}, name: '90% CI', showlegend: true, hoverinfo: 'skip'
+                },
+                {
+                    x: x.concat([].concat(x).reverse()),
+                    y: p25Slice.concat([].concat(p75Slice).reverse()),
+                    fill: 'toself', fillcolor: 'rgba(247,147,26,0.18)',
+                    line: {color: 'transparent'}, name: '50% CI', showlegend: true, hoverinfo: 'skip'
+                },
+                {
+                    x: x, y: p50Slice, mode: 'lines',
+                    line: {color: '#f7931a', width: 2.5}, name: 'Median Sim'
+                },
+            ];
+
+            Plotly.newPlot('doc-walkthrough-fan', traces, {
+                paper_bgcolor: 'transparent', plot_bgcolor: '#16161f',
+                font: { family: 'Space Grotesk, sans-serif', color: '#a0a0b0', size: 11 },
+                xaxis: { title: 'Days', gridcolor: '#2a2a3a', tickfont: {color: '#a0a0b0'} },
+                yaxis: { title: 'Price (USD)', type: 'log', gridcolor: '#2a2a3a', tickfont: {color: '#a0a0b0'} },
+                margin: { t: 20, r: 30, b: 50, l: 70 },
+                legend: { font: {color: '#a0a0b0'} },
+                showlegend: true,
+            }, {responsive: true});
+        }
+
+        function renderForwardFan() {
+            var pp = ER.pricePercentiles;
+            if (!pp || !pp.rbb) return;
+            var rbb = pp.rbb;
+            var n = rbb.p50.length;
+            var x = Array.from({length: n}, function(_, i) { return i * 30; });
+
+            var traces = [
+                {
+                    x: x.concat([].concat(x).reverse()),
+                    y: rbb.p5.concat([].concat(rbb.p95).reverse()),
+                    fill: 'toself', fillcolor: 'rgba(247,147,26,0.08)',
+                    line: {color: 'transparent'}, name: '90% CI', showlegend: true, hoverinfo: 'skip'
+                },
+                {
+                    x: x.concat([].concat(x).reverse()),
+                    y: rbb.p25.concat([].concat(rbb.p75).reverse()),
+                    fill: 'toself', fillcolor: 'rgba(247,147,26,0.18)',
+                    line: {color: 'transparent'}, name: '50% CI', showlegend: true, hoverinfo: 'skip'
+                },
+                {
+                    x: x, y: rbb.p50, mode: 'lines',
+                    line: {color: '#f7931a', width: 2.5}, name: 'Median'
+                },
+            ];
+            // Add median lines for GARCH and GBM
+            if (pp.garch) {
+                traces.push({
+                    x: x, y: pp.garch.p50, mode: 'lines',
+                    line: {color: '#4a9eff', width: 2, dash: 'dash'}, name: 'GARCH Median'
+                });
+            }
+            if (pp.gbm) {
+                traces.push({
+                    x: x, y: pp.gbm.p50, mode: 'lines',
+                    line: {color: '#a0a0b0', width: 2, dash: 'dash'}, name: 'GBM Median'
+                });
+            }
+
+            Plotly.newPlot('doc-forward-fan', traces, {
+                paper_bgcolor: 'transparent', plot_bgcolor: '#16161f',
+                font: {family: 'Space Grotesk, sans-serif', color: '#a0a0b0', size: 11},
+                xaxis: {title: 'Days', gridcolor: '#2a2a3a', tickfont: {color: '#a0a0b0'}},
+                yaxis: {title: 'Price (USD)', type: 'log', gridcolor: '#2a2a3a', tickfont: {color: '#a0a0b0'}},
+                margin: {t: 20, r: 30, b: 50, l: 70},
+                showlegend: true, legend: {font: {color: '#a0a0b0'}},
+            }, {responsive: true});
+        }
+
+        function renderHorizonChart() {
+            var hs = ER.horizonScores;
+            var horizons = ['180d', '365d', '730d', '1460d'];
+
+            var traces = [
+                {
+                    name: 'RBB', x: horizons,
+                    y: horizons.map(function(h) { return hs[h].rbb; }),
+                    type: 'bar', marker: {color: '#f7931a'},
+                    text: horizons.map(function(h) { return hs[h].rbb.toFixed(3); }),
+                    textposition: 'outside', textfont: {color: '#f7931a', size: 11}
+                },
+                {
+                    name: 'GARCH', x: horizons,
+                    y: horizons.map(function(h) { return hs[h].garch; }),
+                    type: 'bar', marker: {color: '#4a9eff'},
+                    text: horizons.map(function(h) { return hs[h].garch.toFixed(3); }),
+                    textposition: 'outside', textfont: {color: '#4a9eff', size: 11}
+                },
+                {
+                    name: 'GBM', x: horizons,
+                    y: horizons.map(function(h) { return hs[h].gbm; }),
+                    type: 'bar', marker: {color: '#606070'},
+                    text: horizons.map(function(h) { return hs[h].gbm.toFixed(3); }),
+                    textposition: 'outside', textfont: {color: '#a0a0b0', size: 11}
+                },
+            ];
+
+            Plotly.newPlot('doc-horizon-chart', traces, {
+                paper_bgcolor: 'transparent', plot_bgcolor: '#16161f',
+                font: { family: 'Space Grotesk, sans-serif', color: '#a0a0b0', size: 12 },
+                barmode: 'group',
+                xaxis: { gridcolor: '#2a2a3a', tickfont: {color: '#a0a0b0', size: 13} },
+                yaxis: { gridcolor: '#2a2a3a', tickfont: {color: '#a0a0b0'}, range: [0.70, 0.86], title: 'Walk-Forward Composite' },
+                margin: { t: 20, r: 30, b: 50, l: 70 },
+                legend: { font: {color: '#a0a0b0'}, orientation: 'h', y: -0.15 },
+            }, {responsive: true});
+        }
+
+        function initDonutHover() {
+            var segments = document.querySelectorAll('.donut-segment');
+            var catDescs = document.querySelectorAll('.cat-desc');
+            var centerTop = document.getElementById('donut-center-top');
+            var centerBottom = document.getElementById('donut-center-bottom');
+
+            var catNames = {
+                'path-dynamics': ['Path Dynamics', '35%'],
+                'tail-risk': ['Tail Risk', '25%'],
+                'distributional': ['Distributional', '15%'],
+                'vol-clustering': ['Vol Clustering', '10%'],
+                'forecast': ['Forecast', '15%']
+            };
+
+            function highlight(cat) {
+                segments.forEach(function(s) {
+                    if (s.dataset.cat === cat) { s.classList.add('active'); s.classList.remove('dimmed'); }
+                    else { s.classList.remove('active'); s.classList.add('dimmed'); }
+                });
+                catDescs.forEach(function(d) {
+                    if (d.dataset.cat === cat) { d.classList.add('highlighted'); d.classList.remove('dimmed'); }
+                    else { d.classList.remove('highlighted'); d.classList.add('dimmed'); }
+                });
+                if (catNames[cat]) {
+                    centerTop.textContent = catNames[cat][0];
+                    centerBottom.textContent = catNames[cat][1];
+                }
+            }
+
+            function resetAll() {
+                segments.forEach(function(s) { s.classList.remove('active', 'dimmed'); });
+                catDescs.forEach(function(d) { d.classList.remove('highlighted', 'dimmed'); });
+                centerTop.textContent = 'Composite';
+                centerBottom.textContent = '9 Metrics';
+            }
+
+            segments.forEach(function(s) {
+                s.addEventListener('mouseenter', function() { highlight(s.dataset.cat); });
+                s.addEventListener('mouseleave', resetAll);
+            });
+            catDescs.forEach(function(d) {
+                d.addEventListener('mouseenter', function() { highlight(d.dataset.cat); });
+                d.addEventListener('mouseleave', resetAll);
+            });
+        }
+
+        // ════════════════════════════════════════════
+        // BCR COMPUTATION
+        // ════════════════════════════════════════════
+        function getAmp() { return parseFloat(document.getElementById('amplification').value); }
+        function getDivRate() { return parseFloat(document.getElementById('div-rate').value); }
+        function computeBCR(amp, divRate) {
+            return 1 / ((amp / 100) * (divRate / 100));
+        }
+
+        // Find the nearest BCR grid index
+        function findBCRIndex(bcr) {
+            const grid = D.pd_vs_bcr.bcr_grid;
+            let closest = 0;
+            let minDist = Math.abs(grid[0] - bcr);
+            for (let i = 1; i < grid.length; i++) {
+                const dist = Math.abs(grid[i] - bcr);
+                if (dist < minDist) { minDist = dist; closest = i; }
+            }
+            return closest;
+        }
+
+        // ════════════════════════════════════════════
+        // SIDEBAR UPDATE
+        // ════════════════════════════════════════════
+        function updateSidebar() {
+            const amp = getAmp();
+            const divRate = getDivRate();
+            const bcr = computeBCR(amp, divRate);
+            const cashReserve = parseInt(document.getElementById('cash-reserve').value);
+            const navM = parseFloat(document.getElementById('nav').value) || 1000;
+
+            // Update displayed values
+            document.getElementById('val-amplification').textContent = amp.toFixed(1) + '%';
+            document.getElementById('val-div-rate').textContent = divRate.toFixed(1) + '%';
+            document.getElementById('val-cash-reserve').textContent = cashReserve + ' mo';
+            document.getElementById('bcr-display').textContent = bcr.toFixed(1) + 'x';
+            document.getElementById('bcr-hidden').value = bcr;
+
+            // NAV-derived values
+            const nav = navM * 1e6;
+            const ppeNotional = nav * (amp / 100);
+            const annDiv = ppeNotional * (divRate / 100);
+            const monthlyDiv = annDiv / 12;
+            document.getElementById('val-nav').textContent = navM >= 1000 ? '$' + (navM / 1000).toFixed(1) + 'B' : '$' + navM + 'M';
+            document.getElementById('derived-ppe').textContent = '$' + (ppeNotional / 1e6).toFixed(0) + 'M';
+            document.getElementById('derived-annual-div').textContent = '$' + (annDiv / 1e6).toFixed(1) + 'M';
+            document.getElementById('derived-monthly-div').textContent = '$' + (monthlyDiv / 1e6).toFixed(2) + 'M';
+
+            // Runway: NAV / monthlyDiv
+            const runwayMonths = monthlyDiv > 0 ? Math.floor(nav / monthlyDiv) : 999;
+            document.getElementById('derived-runway').textContent = runwayMonths > 480 ? '480+ mo' : runwayMonths + ' mo';
+
+            // Update PD cards and charts if data is loaded
+            if (dataLoaded) {
+                updatePDCards(bcr);
+                updateBCRCurve();
+                updateContextBox(bcr, amp, divRate);
+            }
+        }
+
+        function updatePDCards(bcr) {
+            const idx = findBCRIndex(bcr);
+            const grid = D.pd_vs_bcr.bcr_grid;
+            const modelColors = { rbb: '#f7931a', garch: '#4a9eff', gbm: '#a0a0b0' };
+
+            ['rbb', 'garch', 'gbm'].forEach(model => {
+                const pd = D.pd_vs_bcr[model].pd[idx];
+                const el = document.getElementById('pd-' + model);
+                el.textContent = pd.toFixed(2) + '%';
+                el.style.color = modelColors[model];
+            });
+        }
+
+        function updateContextBox(bcr, amp, divRate) {
+            const idx = findBCRIndex(bcr);
+            const rbbPD = D.pd_vs_bcr.rbb.pd[idx];
+            const garchPD = D.pd_vs_bcr.garch.pd[idx];
+            const gbmPD = D.pd_vs_bcr.gbm.pd[idx];
+            const el = document.getElementById('context-box');
+            el.innerHTML = 'At <strong style="color:var(--accent-orange);">' + bcr.toFixed(1) + 'x BCR</strong> (' +
+                amp.toFixed(0) + '% amplification, ' + divRate.toFixed(1) + '% dividend rate), over a 4-year horizon: ' +
+                '<strong style="color:var(--accent-orange);">RBB ' + rbbPD.toFixed(2) + '%</strong> failure | ' +
+                '<strong style="color:var(--accent-blue);">GARCH ' + garchPD.toFixed(2) + '%</strong> | ' +
+                '<strong style="color:var(--text-muted);">GBM ' + gbmPD.toFixed(2) + '%</strong>';
+        }
+
+        // ════════════════════════════════════════════
+        // CHARTS
+        // ════════════════════════════════════════════
+        function updateBCRCurve() {
+            const bcr = computeBCR(getAmp(), getDivRate());
+            const idx = findBCRIndex(bcr);
+            const mode = document.getElementById('bcr-metric-select').value;
+            const curves = D.bcr_curves_by_level;
+            const pctRange = curves.pct_range;
+
+            const traces = [];
+
+            // Red failure zone
+            traces.push({
+                x: [0, 100], y: [0.01, 0.01],
+                fill: 'tozeroy', fillcolor: 'rgba(255,71,87,0.08)',
+                line: { color: 'transparent' },
+                showlegend: false, hoverinfo: 'skip',
+            });
+
+            ['rbb', 'garch', 'gbm'].forEach(k => {
+                if (!curves[k]) return;
+                const yVals = curves[k][mode][idx];
+                traces.push({
+                    x: pctRange, y: yVals, mode: 'lines',
+                    line: { color: COLORS[k], width: k === 'rbb' ? 3 : 2 },
+                    name: LABELS[k],
+                });
+            });
+
+            const label = mode === 'terminal' ? 'Terminal BCR' : 'Minimum BCR';
+            Plotly.newPlot('chart-bcr-curve', traces, {
+                ...PLOTLY_LAYOUT,
+                xaxis: {
+                    ...PLOTLY_LAYOUT.xaxis,
+                    title: 'Percentile (sorted paths, worst to best)',
+                    tickvals: [1, 5, 10, 25, 50, 75, 90, 95, 99],
+                    range: [0, 100],
+                },
+                yaxis: {
+                    ...PLOTLY_LAYOUT.yaxis,
+                    type: 'log',
+                    title: label,
+                    tickvals: LOG_TICKVALS,
+                    ticktext: LOG_TICKTEXT,
+                },
+                shapes: [{
+                    type: 'line', x0: 0, x1: 100, y0: 1, y1: 1,
+                    line: { color: '#ff4757', width: 2, dash: 'dash' },
+                }],
+                annotations: [{
+                    x: 5, y: Math.log10(0.3), text: 'FAILURE ZONE', showarrow: false,
+                    font: { color: '#ff4757', size: 11, family: 'Space Grotesk' },
+                    xref: 'x', yref: 'y',
+                }],
+            }, { responsive: true });
+
+            // Update percentile table
+            updatePercentileTable(mode, idx);
+        }
+
+        function updatePercentileTable(mode, idx) {
+            const curves = D.bcr_curves_by_level;
+            const pctRange = curves.pct_range;
+            const pctTargets = [1, 5, 10, 25, 50, 75, 90, 95, 99];
+            let html = '';
+            pctTargets.forEach(p => {
+                const pIdx = pctRange.indexOf(p);
+                if (pIdx < 0) return;
+                const rbbVal = curves.rbb[mode][idx][pIdx];
+                const garchVal = curves.garch[mode][idx][pIdx];
+                const gbmVal = curves.gbm[mode][idx][pIdx];
+                html += '<tr>';
+                html += '<td>P' + p + '</td>';
+                html += '<td style="color:var(--accent-orange);">' + fmtBCR(rbbVal) + '</td>';
+                html += '<td style="color:var(--accent-blue);">' + fmtBCR(garchVal) + '</td>';
+                html += '<td>' + fmtBCR(gbmVal) + '</td>';
+                html += '</tr>';
+            });
+            document.getElementById('percentile-table-body').innerHTML = html;
+        }
+
+        function fmtBCR(v) {
+            if (v >= 1000) return v.toFixed(0) + 'x';
+            if (v >= 100) return v.toFixed(1) + 'x';
+            if (v >= 10) return v.toFixed(2) + 'x';
+            return v.toFixed(3) + 'x';
+        }
+
+        function drawCumFail() {
+            const n = D.bcr_default.rbb.cumulative_failure.length;
+            const x = Array.from({ length: n }, (_, i) => i + 1);
+            const traces = [];
+            ['rbb', 'garch', 'gbm'].forEach(k => {
+                if (!D.bcr_default[k] || !D.bcr_default[k].cumulative_failure) return;
+                traces.push({
+                    x, y: D.bcr_default[k].cumulative_failure, mode: 'lines',
+                    line: { color: COLORS[k], width: k === 'rbb' ? 3 : 2 },
+                    name: LABELS[k],
+                });
+            });
+            Plotly.newPlot('chart-cum-fail', traces, {
+                ...PLOTLY_LAYOUT,
+                xaxis: { ...PLOTLY_LAYOUT.xaxis, title: 'Month' },
+                yaxis: { ...PLOTLY_LAYOUT.yaxis, title: 'Cumulative Failure (%)' },
+            }, { responsive: true });
+        }
+
+        function drawPriceChart() {
+            const n = D.price_percentiles.rbb.p50.length;
+            const x = Array.from({ length: n }, (_, i) => i * 30);
+            const rbb = D.price_percentiles.rbb;
+
+            const traces = [
+                // RBB 90% CI envelope
+                {
+                    x: x.concat([...x].reverse()),
+                    y: rbb.p5.concat([...rbb.p95].reverse()),
+                    fill: 'toself', fillcolor: 'rgba(247,147,26,0.06)',
+                    line: { color: 'transparent' },
+                    name: 'RBB 90% CI', showlegend: true, hoverinfo: 'skip',
+                },
+                // RBB 50% CI envelope
+                {
+                    x: x.concat([...x].reverse()),
+                    y: rbb.p25.concat([...rbb.p75].reverse()),
+                    fill: 'toself', fillcolor: 'rgba(247,147,26,0.15)',
+                    line: { color: 'transparent' },
+                    name: 'RBB 50% CI', showlegend: true, hoverinfo: 'skip',
+                },
+            ];
+
+            // Median lines for all 3 models
+            ['rbb', 'garch', 'gbm'].forEach(k => {
+                traces.push({
+                    x, y: D.price_percentiles[k].p50, mode: 'lines',
+                    line: {
+                        color: COLORS[k],
+                        width: k === 'rbb' ? 2.5 : 2,
+                        dash: k === 'rbb' ? 'solid' : 'dash',
+                    },
+                    name: LABELS[k] + ' Median',
+                });
+            });
+
+            Plotly.newPlot('chart-price', traces, {
+                ...PLOTLY_LAYOUT,
+                yaxis: { ...PLOTLY_LAYOUT.yaxis, type: 'log', title: 'Price (USD)' },
+                xaxis: { ...PLOTLY_LAYOUT.xaxis, title: 'Days' },
+                shapes: [{
+                    type: 'line', x0: 0, x1: x[x.length - 1],
+                    y0: META.initial_price, y1: META.initial_price,
+                    line: { color: '#606070', width: 1, dash: 'dot' },
+                }],
+            }, { responsive: true });
+        }
+
+        // ════════════════════════════════════════════
+        // LOAD DATA (initial render)
+        // ════════════════════════════════════════════
+        function loadData() {
+            dataLoaded = true;
+            const bcr = computeBCR(getAmp(), getDivRate());
+
+            // Update PD cards
+            updatePDCards(bcr);
+            updateContextBox(bcr, getAmp(), getDivRate());
+
+            // Draw all charts
+            updateBCRCurve();
+            drawCumFail();
+            drawPriceChart();
+        }
+
+        // ════════════════════════════════════════════
+        // BCR REFERENCE TABLE TOGGLE
+        // ════════════════════════════════════════════
+        function toggleBcrRefTable(e) {
+            if (e) e.stopPropagation();
+            const wrap = document.getElementById('bcr-ref-table-wrap');
+            const toggle = document.getElementById('bcr-ref-table-toggle');
+            const isVisible = wrap.style.display !== 'none';
+            wrap.style.display = isVisible ? 'none' : 'block';
+            toggle.setAttribute('aria-expanded', !isVisible);
+        }
+
+        // ════════════════════════════════════════════
+        // COLLAPSIBLE TABLE TOGGLE
+        // ════════════════════════════════════════════
+        function toggleCollapsible(header) {
+            header.classList.toggle('active');
+            const content = header.nextElementSibling;
+            content.classList.toggle('active');
+        }
+
+        // ════════════════════════════════════════════
+        // TAB SWITCHING
+        // ════════════════════════════════════════════
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById('tab-' + tabId).style.display = 'block';
+            document.querySelector('[data-tab="' + tabId + '"]').classList.add('active');
+
+            // Render doc charts when switching to docs tab (Plotly needs visible container)
+            if (tabId === 'docs') {
+                setTimeout(function() {
+                    renderWalkthroughFan();
+                    renderForwardFan();
+                    renderHorizonChart();
+                }, 50);
+            }
+        }
+
+        // ════════════════════════════════════════════
+        // EVENT LISTENERS
+        // ════════════════════════════════════════════
+        document.getElementById('amplification').addEventListener('input', updateSidebar);
+        document.getElementById('div-rate').addEventListener('input', updateSidebar);
+        document.getElementById('cash-reserve').addEventListener('input', updateSidebar);
+        document.getElementById('nav').addEventListener('input', updateSidebar);
+
+        // ════════════════════════════════════════════
+        // INITIAL STATE
+        // ════════════════════════════════════════════
+        updateSidebar();
+        populateDocFromER();
+        initDonutHover();
+
+        // Render doc charts on initial load (they may be hidden, so also re-render on tab switch)
+        renderWalkthroughFan();
+        renderForwardFan();
+        renderHorizonChart();
+    </script>
+</body>
+</html>
